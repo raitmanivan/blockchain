@@ -13,7 +13,7 @@ $ git clone https://github.com/iraitman/blockchain.git
 Install the dependencies,
 
 ```sh
-$ cd python_blockchain_app
+$ cd blockchain
 $ pip install -r requirements.txt
 ```
 
