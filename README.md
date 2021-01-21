@@ -1,13 +1,13 @@
-# python_blockchain_app
+# Blockchain Proyect
 
-A simple tutorial for developing a blockchain application from scratch in Python.
+#### Ivan Raitman
 
 ## Instructions to run
 
 Clone the project,
 
 ```sh
-$ git clone https://github.com/satwikkansal/python_blockchain_app.git
+$ git clone https://github.com/iraitman/blockchain.git
 ```
 
 Install the dependencies,
@@ -26,7 +26,6 @@ $ flask run --port 8000
 ```
 
 One instance of our blockchain node is now up and running at port 8000.
-
 
 Run the application on a different terminal session,
 
