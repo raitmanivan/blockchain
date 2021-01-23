@@ -7,70 +7,344 @@
 Clone the project,
 
 ```sh
-$ git clone https://github.com/iraitman/blockchain.git
+$ git clone ...
 ```
 
 Install the dependencies,
 
 ```sh
-$ cd blockchain
 $ pip install -r requirements.txt
 ```
 
 Start a blockchain node server,
 
 ```sh
-# Windows users can follow this: https://flask.palletsprojects.com/en/1.1.x/cli/#application-discovery
 $ export FLASK_APP=blueprint.py
 $ flask run --port 8000
 ```
 
 One instance of our blockchain node is now up and running at port 8000.
 
-Run the application on a different terminal session,
-
-```sh
-$ python run_app.py
-```
-
-The application should be up and running at [http://localhost:5000](http://localhost:5000).
+The application should be up and running at [http://localhost:8000](http://localhost:8000).
 
 To play around by spinning off multiple custom nodes, use the `register_with/` endpoint to register a new node. 
 
-Here's a sample scenario that you might wanna try,
+If you want to add more nodes to this network:
 
 ```sh
-# Make sure you set the FLASK_APP environment variable to blueprint.py before running these nodes
-# already running
-$ flask run --port 8000 &
-# spinning up new nodes
-$ flask run --port 8001 &
-$ flask run --port 8002 &
+$ export FLASK_APP=blueprint.py
+$ flask run --port 8001
 ```
 
-You can use the following cURL requests to register the nodes at port `8001` and `8002` with the already running `8000`.
+Now a new application should be up and running at [http://localhost:8001](http://localhost:8001).
 
-```sh
-curl -X POST \
-  http://127.0.0.1:8001/register_with \
-  -H 'Content-Type: application/json' \
-  -d '{"node_address": "http://127.0.0.1:8000"}'
+## Endpoints
+
+* [Get chain](#get-chain)
+* [Mine](#mine)
+
+* [Get transactions](#get-transactions)
+* [New transaction](#new-transaction)
+
+* [New node](#new-node)
+* [Consensus](#consensus)
+
+## Get chain
+  A json list with the blockchain.
+
+* **URL**
+
+  /chain
+
+* **Method:**
+
+  `GET`
+
+* **Success Response:**
+
+    **Code:** 200 <br />
+    **Content:**
 ```
-
-```sh
-curl -X POST \
-  http://127.0.0.1:8002/register_with \
-  -H 'Content-Type: application/json' \
-  -d '{"node_address": "http://127.0.0.1:8000"}'
+          {
+            "Data": {
+              "chain": [
+                {
+                  "index": 1,
+                  "previous_hash": "1",
+                  "proof": 100,
+                  "timestamp": 1611431289.167938,
+                  "transactions": []
+                }
+              ],
+              "length": 1
+            }
+          }
 ```
+* **Error Response:**
 
-This will make the node at port 8000 aware of the nodes at port 8001 and 8002, and make the newer nodes sync the chain with the node 8000, so that they are able to actively participate in the mining process post registration.
+  * **Code:** 500 INTERNAL SERVER ERROR <br />
+    **Content:** `{ "Desc" : "There was an error" }`
 
-To update the node with which the frontend application syncs (default is localhost port 8000), change `CONNECTED_NODE_ADDRESS` field in the [views.py](/app/views.py) file.
+* **Sample Call:**
 
-Once you do all this, you can run the application, create transactions (post messages via the web inteface), and once you mine the transactions, all the nodes in the network will update the chain. The chain of the nodes can also be inspected by inovking `/chain` endpoint using cURL.
+  ```
+    curl 'http://localhost:8000/chain'
+  ```
 
-```sh
-$ curl -X GET http://localhost:8001/chain
-$ curl -X GET http://localhost:8002/chain
+## Mine
+  Mine the chain
+* **URL**
+
+  /chain/mine
+
+* **Method:**
+
+  `PUT`
+
+* **Success Response:**
+
+    **Code:** 200 <br />
+    **Content:**
+    ```
+        {
+          "Data": {
+            "index": 2,
+            "message": "New Block Forged",
+            "previous_hash": "dcd3e7d639a7dd671ca08ac87667763567819f16e9a4f9ef7f451eac3eb80375",
+            "proof": 65898,
+            "transactions": [
+              {
+                "amount": "100000",
+                "recipient": "ivanokey",
+                "sender": "ivan"
+              }
+            ]
+          }
+        }
+    ```
+
+    **Code:** 200 <br />
+    **Content:**
+    ```
+      {
+        "Desc": "There are no transactions"
+      }
+    ```
+
+* **Error Response:**
+
+  * **Code:** 500 INTERNAL SERVER ERROR <br />
+    **Content:** `{ "Desc" : "There was an error" }`
+
+* **Sample Call:**
+
+  ```
+  curl -XPUT 'http://localhost:8000/chain/mine'
+  ```
+
+## Get transactions
+  A json list with all pending transactions.
+
+* **URL**
+
+  /transactions
+
+* **Method:**
+
+  `GET`
+
+* **Success Response:**
+
+    **Code:** 200 <br />
+    **Content:**
 ```
+      {
+        "Data": [
+          {
+            "amount": "100000",
+            "recipient": "ivanokey",
+            "sender": "ivan"
+          }
+        ]
+      }
+```
+* **Error Response:**
+
+  * **Code:** 500 INTERNAL SERVER ERROR <br />
+    **Content:** `{ "Desc" : "There was an error" }`
+
+* **Sample Call:**
+
+  ```
+    curl 'http://localhost:8000/transactions'
+  ```
+
+## New transaction
+  Create a new transaction to add to a block.
+* **URL**
+
+  /transaction
+
+* **Method:**
+
+  `POST`
+
+* **Data Params**
+
+  ```
+{
+	"sender": "ivan",
+	"recipient": "ivanokey",
+	"amount": "100000"
+}
+  ```
+
+* **Success Response:**
+
+    **Code:** 200 <br />
+    **Content:**
+    ```
+      {
+        "Desc": "Transaction will be added to Block 3"
+      }
+    ```
+
+* **Error Response:**
+
+  * **Code:** 400 BAD REQUEST <br />
+    **Content:** `{ "Desc" : "Invalid json data" }`
+  * **Code:** 500 INTERNAL SERVER ERROR <br />
+    **Content:** `{ "Desc" : "There was an error" }`
+
+* **Sample Call:**
+
+  ```
+  curl -XPOST -H "Content-type: application/json" -d '{
+	"sender": "ivan",
+	"recipient": "ivanokey",
+	"amount": "100000"
+}' 'http://localhost:8000/transaction'
+  ```
+
+## New node
+  Create a new node to add to the blockchain.
+* **URL**
+
+  /nodes/register
+
+* **Method:**
+
+  `POST`
+
+* **Data Params**
+
+  ```
+    {
+      "nodes": [
+        "http://127.0.0.1:8001"
+      ]
+    }
+  ```
+
+* **Success Response:**
+
+    **Code:** 200 <br />
+    **Content:**
+    ```
+        {
+          "Data": {
+            "message": "New nodes have been added",
+            "total_nodes": [
+              "127.0.0.1:8001"
+            ]
+          }
+        }
+    ```
+
+* **Error Response:**
+
+  * **Code:** 400 BAD REQUEST <br />
+    **Content:** `{ "Desc" : "Invalid json data" }`
+  * **Code:** 400 BAD REQUEST <br />
+    **Content:** `{ "Desc" : "The list cannot be empty" }`  
+  * **Code:** 400 BAD REQUEST <br />
+    **Content:** `{ "Desc" : "Invalid URL" }`        
+  * **Code:** 500 INTERNAL SERVER ERROR <br />
+    **Content:** `{ "Desc" : "There was an error" }`
+
+* **Sample Call:**
+
+  ```
+  curl -XPOST -H "Content-type: application/json" -d '{
+      "nodes": [
+        "http://127.0.0.1:8001"
+      ]
+    }' 'http://localhost:8000/nodes/register'
+  ```
+
+## Consensus
+  Solve the problem of a long chain when there are multiple nodes.
+* **URL**
+
+  /nodes/resolve
+
+* **Method:**
+
+  `PUT`
+
+* **Success Response:**
+
+    **Code:** 200 <br />
+    **Content:**
+    ```
+      {
+        "Desc": {
+          "chain": [
+            {
+              "index": 1,
+              "previous_hash": "1",
+              "proof": 100,
+              "timestamp": 1611432411.3887239,
+              "transactions": []
+            }
+          ],
+          "message": "Our chain is authoritative"
+        }
+      }
+    ```
+
+    **Code:** 200 <br />
+    **Content:**
+    ```
+      {
+        "Desc": {
+          "chain": [
+            {
+              "index": 1,
+              "previous_hash": "1",
+              "proof": 100,
+              "timestamp": 1611432411.3887239,
+              "transactions": []
+            }
+          ],
+          "message": "Our chain was replaced"
+        }
+      }
+    ```
+
+* **Error Response:**
+
+  * **Code:** 500 INTERNAL SERVER ERROR <br />
+    **Content:** `{ "Desc" : "There was an error" }`
+
+* **Sample Call:**
+
+  ```
+  curl -XPUT 'http://localhost:8000/nodes/resolve'
+  ```
+
+
+
+
+
+

@@ -2,20 +2,19 @@ from flask import Flask, jsonify,request
 from jsonschema import validate,exceptions
 from functools import wraps
 
-import time
+from time import time
 import requests
 import json
 
-from app.controller.blockchain import Blockchain, Block
-from app.resources.blockchain import *
+from app.controller.blockchain import Blockchain
+
 from app.schemas.schemas import *
+from uuid import uuid4
 
 app = Flask(__name__)
 
 blockchain = Blockchain()
-blockchain.create_genesis_block()
-
-peers = set()
+node_identifier = str(uuid4()).replace('-', '')
 
 def logger_decorator(func):
     @wraps(func)
@@ -24,99 +23,93 @@ def logger_decorator(func):
             return func(*args, **kwargs)
         except exceptions.ValidationError as ve:
             return jsonify({'Desc': 'Invalid json data'}),400
+        except ValueError as e:
+            return jsonify({'Desc': 'Invalid URL'}), 400            
         except Exception as e:
             return jsonify({'Desc': 'There was an error'}), 500
     return wrapper
 
-#Submit a new transaction. 
-@app.route('/new_transaction', methods=['POST'])
+@app.route('/chain/mine', methods=['PUT'])
+@logger_decorator
+def mine():
+    if(blockchain.get_pending_transactions()):
+        last_block = blockchain.last_block
+        proof = blockchain.proof_of_work(last_block)
+        previous_hash = blockchain.hash(last_block)
+        
+        block = blockchain.new_block(proof, previous_hash)
+
+        response = {
+            'message': "New Block Forged",
+            'index': block['index'],
+            'transactions': block['transactions'],
+            'proof': block['proof'],
+            'previous_hash': block['previous_hash'],
+        }
+        return jsonify({'Data': response}), 200
+    else:
+        return jsonify({'Desc': "There are no transactions"}), 200
+    
+
+@app.route('/transaction', methods=['POST'])
 @logger_decorator
 def new_transaction():
-    tx_data = request.get_json()
-    validate(tx_data, transaction_schema)
+    values = request.get_json()
+    validate(values, transaction_schema)
+    index = blockchain.new_transaction(values['sender'], values['recipient'], values['amount'])
 
-    tx_data["timestamp"] = time.time()
-    blockchain.add_new_transaction(tx_data)
+    return jsonify({'Desc': 'Transaction will be added to Block {0}'.format(index)}),200
 
-    return "Success", 201
+@app.route('/transactions', methods=['GET'])
+@logger_decorator
+def get_pending_transactions():
+    response = blockchain.get_pending_transactions()
 
-#Return the node's copy of the chain.
+    return jsonify({'Data': response}),200
+
 @app.route('/chain', methods=['GET'])
-def get_chain():
-    chain_data = []
-    for block in blockchain.chain:
-        chain_data.append(block.__dict__)
-    return json.dumps({"length": len(chain_data),
-                       "chain": chain_data,
-                       "peers": list(peers)})
+@logger_decorator
+def full_chain():
+    response = {
+        'chain': blockchain.chain,
+        'length': len(blockchain.chain),
+    }
+    return jsonify({'Data': response}), 200
 
-#Request the node to mine the unconfirmed transactions
-@app.route('/mine', methods=['GET'])
-def mine_unconfirmed_transactions():
-    result = blockchain.mine()
-    if not result:
-        return jsonify({'Desc': 'No transactions to mine'}), 404
+@app.route('/nodes/register', methods=['POST'])
+@logger_decorator
+def register_nodes():
+    values = request.get_json()
+    validate(values, nodes_schema)
+    nodes = values.get('nodes')
+    if len(nodes) == 0:
+        return jsonify({'Desc': 'The list cannot be empty'}),400
+
+    for node in nodes:         
+        blockchain.register_node(node)
+
+    response = {
+        'message': 'New nodes have been added',
+        'total_nodes': list(blockchain.nodes),
+    }
+    return jsonify({'Data': response}), 200
+
+@app.route('/nodes/resolve', methods=['PUT'])
+@logger_decorator
+def consensus():
+    replaced = blockchain.resolve_conflicts()
+
+    if replaced:
+        response = {
+            'message': 'Our chain was replaced',
+            'new_chain': blockchain.chain
+        }
     else:
-        # Making sure we have the longest chain before announcing to the network
-        chain_length = len(blockchain.chain)
-        consensus(blockchain,peers)
-        if chain_length == len(blockchain.chain):
-            announce_new_block(blockchain.last_block,peers)
-        return jsonify({'Desc': "Block #{} is mined.".format(blockchain.last_block.index)}), 200
+        response = {
+            'message': 'Our chain is authoritative',
+            'chain': blockchain.chain
+        }
 
-#Add new peers to the network. [BETA]
-@app.route('/register_node', methods=['POST'])
-def register_new_peers():
-    node_address = request.get_json()["node_address"]
-    if not node_address:
-        return jsonify({'Desc': 'Invalid json data'}),400
+    return jsonify({'Desc': response}), 200
 
-    peers.add(node_address)
-    return get_chain()
 
-#Register new peers to the network. [BETA]
-@app.route('/register_with', methods=['POST'])
-def register_with_existing_node():
-    node_address = request.get_json()["node_address"]
-    if not node_address:
-        return jsonify({'Desc': 'Invalid json data'}),400
-
-    data = {"node_address": request.host_url}
-    headers = {'Content-Type': "application/json"}
-
-    response = requests.post(node_address + "/register_node",
-                             data=json.dumps(data), headers=headers)
-
-    if response.status_code == 200:
-        global blockchain
-        global peers
-
-        chain_dump = response.json()['chain']
-        blockchain = create_chain_from_dump(chain_dump)
-        peers.update(response.json()['peers'])
-        return jsonify({'Desc': "Registration successful"}), 200
-    else:
-        return jsonify({'Desc': response.content}), response.status_code        
-
-#Add a block mined by someone else to the node's chain.
-@app.route('/add_block', methods=['POST'])
-def verify_and_add_block():
-    block_data = request.get_json()
-    block = Block(block_data["index"],
-                  block_data["transactions"],
-                  block_data["timestamp"],
-                  block_data["previous_hash"],
-                  block_data["nonce"])
-
-    proof = block_data['hash']
-    added = blockchain.add_block(block, proof)
-
-    if not added:
-        return jsonify({'Desc': 'The block was discarded by the node'}), 500
-
-    return jsonify({'Desc': 'Block added to the chain'}), 201
-
-#See unconfirmed transactions
-@app.route('/pending_tx')
-def get_pending_tx():
-    return jsonify({'Data': blockchain.unconfirmed_transactions})
