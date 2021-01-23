@@ -191,13 +191,13 @@ Now a new application should be up and running at [http://localhost:8001](http:/
 
 * **Data Params**
 
-  ```
-{
-	"sender": "ivan",
-	"recipient": "ivanokey",
-	"amount": "100000"
-}
-  ```
+ ```
+	{
+		"sender": "ivan",
+		"recipient": "ivanokey",
+		"amount": "100000"
+	}
+```
 
 * **Success Response:**
 
@@ -217,8 +217,7 @@ Now a new application should be up and running at [http://localhost:8001](http:/
     **Content:** `{ "Desc" : "There was an error" }`
 
 * **Sample Call:**
-
-  ```
+ ```
   curl -XPOST -H "Content-type: application/json" -d '{
 	"sender": "ivan",
 	"recipient": "ivanokey",
